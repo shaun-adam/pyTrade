@@ -8,23 +8,33 @@ import time
 import pandas as pd
 import sqlite3 as sq
 from sqlite3 import Error
+
+import requests
+import json as js
 yf.pdr_override()
 
 # Variables
-tickers = si.tickers_sp500()
-tickers = [item.replace(".", "-") for item in tickers] # Yahoo Finance uses dashes instead of dots
+tickers = []
+ti = requests.get(f"https://www.tsx.com/json/company-directory/search/tsx/%5E*")
+ti = ti.json()
+ti = ti['results']
+for key in ti:
+    tickers.append(key['symbol'])
+
+#tickers = si.tickers_sp500()
+#tickers = [item.replace(".", "-") for item in tickers] # Yahoo Finance uses dashes instead of dots
 index_name = '^GSPC' # S&P 500
 start_date = datetime.datetime.now() - datetime.timedelta(days=365)
 end_date = datetime.date.today()
 exportList = pd.DataFrame(columns=['Stock', "RS_Rating", "50 Day MA", "150 Day Ma", "200 Day MA", "52 Week Low", "52 week High"])
-table_name = "test" # table and file name
+db = "historicalData.db"
 
-def create_connection(db_file,c=""):
+def conn_exec(db_file,c=""):
     """ create a database connection to a SQLite database """
     conn = None
     try:
         conn = sq.connect(db_file)
-        print(sq.version)
+        print('Execute: ',c)
         if c != "":
             conn.cursor().execute(c)
             conn.commit()
@@ -35,40 +45,42 @@ def create_connection(db_file,c=""):
             conn.close()
 
 
-createTbl = "CREATE TABLE IF NOT EXISTS TSX (Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
-create_connection("historicalData.db",createTbl)
+tbl1 = "CREATE TABLE IF NOT EXISTS TSX (Ticker char(10), Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
+tbl2 = "drop table if exists TMP"
+tbl2a = "CREATE TABLE TMP (Ticker char(10), Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
+setup = [tbl1,tbl2,tbl2a]
+for com in setup:
+    conn_exec(db,com)
 
-'''
-for ticker in tickers:
-    # Download historical dat
-    df = pdr.get_data_yahoo(ticker, start_date, end_date)
-    df.to_csv(f'{ticker}.csv')
+def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
+    conn = None
+    try:
+        conn = sq.connect(db_file)
+        df.to_sql(tblName, conn, if_exists=insertMode, index=False)
+
+    except Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
 
 
-
-conn = sq.connect('{}.sqlite'.format(table_name)) # creates file
-df.to_sql(table_name, conn, if_exists='replace', index=False) # writes to file
-conn.close() # good practice: close connection
+trials = ['TSLA','TD']
 
 
+for trial in tickers:
+    df = pdr.get_data_yahoo(trial, start_date, end_date)
+    df = df.rename(columns={"Adj Close": "AdjClose"})
+    df['Date']=df.index
+    df['Ticker'] = trial
+    conn_insert_df('TMP',df,db,'append')
 
+mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
+insData = "INSERT INTO TSX SELECT * FROM TMP"
 
+conn_exec(db,mergeData)
+conn_exec(db,insData)
 
+#increase logging (number of tickers), status (how many are we at out of total?)
 
-
-    # Calculating returns relative to the market (returns multiple)
-    df['Percent Change'] = df['Adj Close'].pct_change()
-    stock_return = (df['Percent Change'] + 1).cumprod()[-1]
-    
-    returns_multiple = round((stock_return / index_return), 2)
-    returns_multiples.extend([returns_multiple])
-    
-    print (f'Ticker: {ticker}; Returns Multiple against S&P 500: {returns_multiple}\n')
-    time.sleep(1)
-
-# Creating dataframe of only top 30%
-rs_df = pd.DataFrame(list(zip(tickers, returns_multiples)), columns=['Ticker', 'Returns_multiple'])
-rs_df['RS_Rating'] = rs_df.Returns_multiple.rank(pct=True) * 100
-rs_df = rs_df[rs_df.RS_Rating >= rs_df.RS_Rating.quantile(.70)]
-
-'''
+#start thinking of how to split into modules??
