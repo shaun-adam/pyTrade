@@ -12,7 +12,6 @@ import requests
 import json as js
 yf.pdr_override()
 
-
 #Function to execute commands on SQLITE db that don't return a value
 def conn_exec(db_file,c="",verbose=False):
     """ create a database connection to a SQLite database """
@@ -43,8 +42,7 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
             conn.close()
 
 #Function to return all rows of a query against a SQLITE db. By default grabs single column
-def conn_read(db_file,c="",verbose=False), single=True:
-    """ create a database connection to a SQLite database """
+def conn_read(db_file,c="",verbose=False, single=True):
     conn = None
     try:
         conn = sq.connect(db_file)
@@ -65,8 +63,13 @@ def conn_read(db_file,c="",verbose=False), single=True:
         if conn:
             conn.close()
 
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
 #timeframe to pull
-start_date = datetime.datetime.now() - datetime.timedelta(days=365)
+start_date = datetime.datetime.now() - datetime.timedelta(days=2)
 end_date = datetime.date.today()
 
 #SQLITE file
@@ -91,31 +94,33 @@ try:
     for key in ti:
         tickers.append(key['symbol'])
     tickers = [t + '.TO' for t in tickers]
+   
 except Exception as err:# requests.exceptions.Timeout as err: 
     #print(err)
     tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
     tickers = conn_read(db,tickerSQL)
-
-
-totTickers = len(tickers)
+   
 
 mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
 insData = "INSERT INTO TSX SELECT Ticker, Date,Open ,High , Low , Close, AdjClose, Volume FROM TMP"
 
-#loop through tickers and grab historicals from Yahoo Finance
-#overwrite existing data for same security on same day
+totTickers = len(tickers)
+
 i = 0
-for tick in tickers:
-    
-    df = pdr.get_data_yahoo(tick, start_date, end_date,progress=False)
+for ticks in chunks(tickers,100):
+    s = ' '
+    s = s.join(ticks)
+    ticks = s
+    df = yf.download(ticks,period = "max",progress=False)
     df = df.rename(columns={"Adj Close": "AdjClose"})
-    df['Date']=df.index
-    df['Ticker'] = tick
+    df=df.stack(level = 1).reset_index().rename(columns={"level_1":"Ticker"})
     conn_insert_df('TMP',df,db,'replace')
     conn_exec(db,mergeData)
     conn_exec(db,insData)
-    i=i+1
+    i=i+100
     print(i,"out of ",totTickers," checked")
 
-#create a control table per ticker for when it was last updated and setup dynamic ranges
-#start thinking of how to split into modules??
+
+#split large list into bulks of 20
+#reshape DF to match that of SQL table
+#compare performance for 100 stocks - same time period (top 100 from list or something)
