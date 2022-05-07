@@ -33,7 +33,7 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
     conn = None
     try:
         conn = sq.connect(db_file)
-        df.to_sql(tblName, conn, if_exists=insertMode, index=False)
+        df.to_sql(tblName, conn, if_exists=insertMode,index=False)
 
     except Error as e:
         print(e)
@@ -41,8 +41,8 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
         if conn:
             conn.close()
 
-#Function to return all rows of a query against a SQLITE db. By default grabs single column
-def conn_read(db_file,c="",verbose=False, single=True):
+#Function to return all rows of a query against a SQLITE db. By default grabs single column in list.  Otherwise returns dataframe
+def conn_read(db_file,c="",verbose=False, single=True,cols = None,ind = None):
     conn = None
     try:
         conn = sq.connect(db_file)
@@ -50,12 +50,15 @@ def conn_read(db_file,c="",verbose=False, single=True):
             print('Execute: ',c)
         if c != "":
             recs = conn.cursor().execute(c).fetchall()
-            records = []
-            for r in recs:
-                if single:
+            
+            if single:
+                records = []
+                for r in recs:
                     records.append(r[0])
-                else:
-                    records.append(r)
+            else:
+                
+                records = pd.DataFrame(recs,columns=cols)
+                records = records.set_index(ind,True)
             return records
     except Error as e:
         print(e)
@@ -68,10 +71,10 @@ def chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
-def refreshTSX(daysBack=7):
+def refreshTSX(p="1mo",secs = None):
     #timeframe to pull
-    start_date = datetime.datetime.now() - datetime.timedelta(days=daysBack)
-    end_date = datetime.date.today()
+    #start_date = datetime.datetime.now() - datetime.timedelta(days=daysBack)
+    #end_date = datetime.date.today()
 
     #SQLITE file
     db = "HistoricalData/historicalData.db"
@@ -84,24 +87,27 @@ def refreshTSX(daysBack=7):
     for com in setup:
         conn_exec(db,com)
 
-    #holds a list of securities to check
-    tickers = []
+    if secs:
+        tickers = secs
+    else:
+        #holds a list of securities to check
+        tickers = []
 
-    #Attempt to retrieve a list of securities from TSX website. If it times out just use a distinct list of securities already in DB
-    try:
-        ti = requests.get(f"https://www.tsx.com/json/company-directory/search/tsx/%5E*",timeout=5)
-        ti = ti.json()
-        ti = ti['results']
-        for key in ti:
-            tickers.append(key['symbol'])
-        tickers = [t + '.TO' for t in tickers]
+        #Attempt to retrieve a list of securities from TSX website. If it times out just use a distinct list of securities already in DB
+        try:
+            ti = requests.get(f"https://www.tsx.com/json/company-directory/search/tsx/%5E*",timeout=5)
+            ti = ti.json()
+            ti = ti['results']
+            for key in ti:
+                tickers.append(key['symbol'])
+            tickers = [t + '.TO' for t in tickers]
 
-    except Exception as err:# requests.exceptions.Timeout as err: 
-        #print(err)
-        tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
-        tickers = conn_read(db,tickerSQL)
+        except Exception as err:# requests.exceptions.Timeout as err: 
+            #print(err)
+            tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
+            tickers = conn_read(db,tickerSQL)
 
-
+    
     mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
     insData = "INSERT INTO TSX SELECT Ticker, Date,Open ,High , Low , Close, AdjClose, Volume FROM TMP"
     tickers = [item for item in tickers if len(item)<8]
@@ -113,9 +119,14 @@ def refreshTSX(daysBack=7):
         s = ' '
         s = s.join(ticks)
         ticks = s
-        df = yf.download(ticks,period = "1mo",progress=False,threads=True)
+        #“1d”, “5d”, “1mo”, “3mo”, “6mo”, “1y”, “2y”, “5y”, “10y”, “ytd”, “max”
+        df = yf.download(ticks,period =p ,progress=False,threads=True)
         df = df.rename(columns={"Adj Close": "AdjClose"})
-        df=df.stack(level = 1).reset_index().rename(columns={"level_1":"Ticker"})
+        df['Ticker'] = ticks
+        if secs:
+             df=df.reset_index().rename(columns={"level_0":"Ticker"})
+        else:
+            df=df.stack(level = 1).reset_index().rename(columns={"level_1":"Ticker"})
         conn_insert_df('TMP',df,db,'replace')
         conn_exec(db,mergeData)
         conn_exec(db,insData)

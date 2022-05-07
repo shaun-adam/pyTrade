@@ -1,1 +1,0 @@
-#functions to act on dataframes per stock
