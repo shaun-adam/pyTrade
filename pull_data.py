@@ -74,7 +74,7 @@ def refreshTSX(daysBack=7):
     end_date = datetime.date.today()
 
     #SQLITE file
-    db = "historicalData.db"
+    db = "HistoricalData/historicalData.db"
 
     #Setup commands on SQLITE DB
     tbl1 = "CREATE TABLE IF NOT EXISTS TSX (Ticker char(10), Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
