@@ -1,4 +1,4 @@
 import pull_data as PULL
 
-PULL.refreshTSX("max")
+PULL.refreshTSX("10y")
 

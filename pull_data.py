@@ -34,7 +34,11 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
     conn = None
     try:
         conn = sq.connect(db_file)
-        df.to_sql(tblName, conn, if_exists=insertMode,index=False)
+        if insertMode == 'replace':
+            dd = f"Delete From "+ tblName 
+            conn.cursor().execute(dd)
+
+        df.to_sql(tblName, conn,if_exists='append', index=False)
 
     except Error as e:
         print(e)
@@ -76,7 +80,7 @@ def refreshTSX(p="1mo",secs = None):
     #timeframe to pull
     #start_date = datetime.datetime.now() - datetime.timedelta(days=daysBack)
     #end_date = datetime.date.today()
-
+    print("Beginning Data Refresh")
     #SQLITE file
     db = "HistoricalData/historicalData.db"
 
@@ -101,19 +105,20 @@ def refreshTSX(p="1mo",secs = None):
             #requests_log = logging.getLogger("requests.packages.urllib3")
             #requests_log.setLevel(logging.DEBUG)
             #requests_log.propagate = True
-            print("refreshing tickers")
+            print("Refreshing Tickers")
             ti = requests.get(f"https://www.tsx.com/json/company-directory/search/tsx/%5E*",timeout=5)
             ti = ti.json()
             ti = ti['results']
             for key in ti:
                 tickers.append(key['symbol'])
             tickers = [t + '.TO' for t in tickers]
-            print("done refreshing tickers")
+            print("Done refreshing Tickers")
 
         except Exception as err:# requests.exceptions.Timeout as err: 
-            #print(err)
+            print("Ticker Refresh Failed")
             tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
             tickers = conn_read(db,tickerSQL)
+            print("Done Tickers Fall Back")
 
     
     mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
@@ -140,5 +145,5 @@ def refreshTSX(p="1mo",secs = None):
         conn_exec(db,insData)
         i=i+len(ticks)
         print(i,"out of ",totTickers," checked")
-
+    print("Data Refresh Complete")
 #resample to weekly to determine long or netural list
