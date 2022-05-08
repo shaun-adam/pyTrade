@@ -1,7 +1,7 @@
 from pull_data import conn_read as cn
 import pull_data as pu
 
-pu.refreshTSX("max")
+pu.refreshTSX("1mo")
 
 cols = ['Ticker', 'Date','Open' ,'High' , 'Low' , 'Close', 'AdjClose', 'Volume']
 db = "HistoricalData/historicalData.db"

@@ -6,6 +6,7 @@ import pandas as pd
 import datetime
 import time
 import sqlite3 as sq
+import logging
 from sqlite3 import Error
 
 import requests
@@ -95,12 +96,19 @@ def refreshTSX(p="1mo",secs = None):
 
         #Attempt to retrieve a list of securities from TSX website. If it times out just use a distinct list of securities already in DB
         try:
+           # logging.basicConfig()
+            #logging.getLogger().setLevel(logging.DEBUG)
+            #requests_log = logging.getLogger("requests.packages.urllib3")
+            #requests_log.setLevel(logging.DEBUG)
+            #requests_log.propagate = True
+            print("refreshing tickers")
             ti = requests.get(f"https://www.tsx.com/json/company-directory/search/tsx/%5E*",timeout=5)
             ti = ti.json()
             ti = ti['results']
             for key in ti:
                 tickers.append(key['symbol'])
             tickers = [t + '.TO' for t in tickers]
+            print("done refreshing tickers")
 
         except Exception as err:# requests.exceptions.Timeout as err: 
             #print(err)
@@ -115,14 +123,14 @@ def refreshTSX(p="1mo",secs = None):
     totTickers = len(tickers)
 
     i = 0
-    for ticks in chunks(tickers,200):
+    for ticks in chunks(tickers,20):
         s = ' '
         s = s.join(ticks)
-        ticks = s
+        ticksJoined = s
         #“1d”, “5d”, “1mo”, “3mo”, “6mo”, “1y”, “2y”, “5y”, “10y”, “ytd”, “max”
-        df = yf.download(ticks,period =p ,progress=False,threads=True)
+        df = pdr.get_data_yahoo(ticksJoined,period =p ,progress=True,threads=True)
         df = df.rename(columns={"Adj Close": "AdjClose"})
-        df['Ticker'] = ticks
+
         if secs:
              df=df.reset_index().rename(columns={"level_0":"Ticker"})
         else:
@@ -130,7 +138,7 @@ def refreshTSX(p="1mo",secs = None):
         conn_insert_df('TMP',df,db,'replace')
         conn_exec(db,mergeData)
         conn_exec(db,insData)
-        i=i+200
+        i=i+len(ticks)
         print(i,"out of ",totTickers," checked")
 
 #resample to weekly to determine long or netural list
