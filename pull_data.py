@@ -21,9 +21,14 @@ def conn_exec(db_file,c="",verbose=False):
         conn = sq.connect(db_file)
         if verbose:
             print('Execute: ',c)
-        if c != "":
+        if isinstance(c, list):
+            for com in c:
+                conn.cursor().execute(com)
+            conn.commit()
+        else:
             conn.cursor().execute(c)
             conn.commit()
+
     except Error as e:
         print(e)
     finally:
@@ -37,9 +42,25 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
         if insertMode == 'replace':
             dd = f"Delete From "+ tblName 
             conn.cursor().execute(dd)
+            conn.commit()
 
         df.to_sql(tblName, conn,if_exists='append', index=False)
 
+    except Error as e:
+        print(e)
+    finally:
+        if conn:
+            conn.close()
+
+def conn_update_meta(val):
+    db = "HistoricalData/historicalData.db"
+    conn = None
+    try:
+        conn = sq.connect(db)
+        for v in val:
+            c = f"REPLACE INTO Meta (Value,Refreshed) VALUES('"+v+"',datetime(CURRENT_TIMESTAMP, 'localtime'))"
+            conn.cursor().execute(c)
+        conn.commit()
     except Error as e:
         print(e)
     finally:
@@ -86,11 +107,13 @@ def refreshTSX(p="1mo",secs = None):
 
     #Setup commands on SQLITE DB
     tbl1 = "CREATE TABLE IF NOT EXISTS TSX (Ticker char(10), Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
+    tbl1a = "CREATE UNIQUE INDEX index_name ON TSX(Date, Ticker)"
     tbl2 = "drop table if exists TMP"
     tbl2a = "CREATE TABLE TMP (Ticker char(10), Date date,Open real,High real,Low real,Close real,AdjClose real,Volume int)"
-    setup = [tbl1,tbl2,tbl2a]
-    for com in setup:
-        conn_exec(db,com)
+    tbl3 = "CREATE TABLE IF NOT EXISTS Meta (Value char(20),Refreshed Date)"
+    tbl3a = "CREATE UNIQUE INDEX idx_value ON Meta (Value)"
+    setup = [tbl1,tbl1a,tbl2,tbl2a,tbl3,tbl3a]
+    conn_exec(db,setup)
 
     if secs:
         tickers = secs
@@ -124,25 +147,34 @@ def refreshTSX(p="1mo",secs = None):
     mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
     insData = "INSERT INTO TSX SELECT Ticker, Date,Open ,High , Low , Close, AdjClose, Volume FROM TMP"
     tickers = [item for item in tickers if len(item)<8]
-
+    tickers.sort()
+    test1 = 'SU.TO' in tickers
+    dontRefresh = conn_read(db,"SELECT Value FROM Meta where julianday()-julianday(Refreshed) <=1")
+    test2 = 'SU.TO' in dontRefresh
+    tickers = list(set(tickers) - set(dontRefresh))
     totTickers = len(tickers)
+    if totTickers == 0:
+        print("No tickers to refresh")
+
 
     i = 0
-    for ticks in chunks(tickers,20):
+    for ticks in chunks(tickers,80):
         s = ' '
-        s = s.join(ticks)
-        ticksJoined = s
+        ss = s.join(ticks)
+        ticksJoined = ss
         #“1d”, “5d”, “1mo”, “3mo”, “6mo”, “1y”, “2y”, “5y”, “10y”, “ytd”, “max”
         df = pdr.get_data_yahoo(ticksJoined,period =p ,progress=True,threads=True)
         df = df.rename(columns={"Adj Close": "AdjClose"})
 
-        if secs:
+        if secs or totTickers == 1:
              df=df.reset_index().rename(columns={"level_0":"Ticker"})
         else:
             df=df.stack(level = 1).reset_index().rename(columns={"level_1":"Ticker"})
         conn_insert_df('TMP',df,db,'replace')
         conn_exec(db,mergeData)
         conn_exec(db,insData)
+        conn_update_meta(ticks)
+
         i=i+len(ticks)
         print(i,"out of ",totTickers," checked")
     print("Data Refresh Complete")
