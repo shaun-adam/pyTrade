@@ -147,10 +147,10 @@ def refreshTSX(p="1mo",secs = None):
     mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
     insData = "INSERT INTO TSX SELECT Ticker, Date,Open ,High , Low , Close, AdjClose, Volume FROM TMP"
     tickers = [item for item in tickers if len(item)<8]
-    tickers.sort()
-    test1 = 'SU.TO' in tickers
+    #tickers.sort()
+    #test1 = 'SU.TO' in tickers
     dontRefresh = conn_read(db,"SELECT Value FROM Meta where julianday()-julianday(Refreshed) <=1")
-    test2 = 'SU.TO' in dontRefresh
+    #test2 = 'SU.TO' in dontRefresh
     tickers = list(set(tickers) - set(dontRefresh))
     totTickers = len(tickers)
     if totTickers == 0:
@@ -178,4 +178,3 @@ def refreshTSX(p="1mo",secs = None):
         i=i+len(ticks)
         print(i,"out of ",totTickers," checked")
     print("Data Refresh Complete")
-#resample to weekly to determine long or netural list
