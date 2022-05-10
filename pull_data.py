@@ -84,7 +84,8 @@ def conn_read(db_file,c="",verbose=False, single=True,cols = None,ind = None):
             else:
                 
                 records = pd.DataFrame(recs,columns=cols)
-                records = records.set_index(ind,True)
+                if ind:
+                    records = records.set_index(ind,True)
             return records
     except Error as e:
         print(e)
