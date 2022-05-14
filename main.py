@@ -1,3 +1,3 @@
-import pull_data as PULL
+import pull_data as pu
 
-PULL.refreshTSX("10y")
+pu.refreshTSX("1mo")
