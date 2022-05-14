@@ -179,3 +179,29 @@ def refreshTSX(p="1mo",secs = None):
         i=i+len(ticks)
         print(i,"out of ",totTickers," checked")
     print("Data Refresh Complete")
+
+def getDF(date,period = 'D"',ticker = None):
+    cols = ['Ticker', 'Date','Open' ,'High' , 'Low' , 'Close', 'AdjClose', 'Volume']
+    db = "HistoricalData/historicalData.db"
+    if ticker:
+        if type(ticker) == list and len(ticker) >1:
+            ticker = "','".join(ticker)
+            ticker = "'"+ticker+"'"
+            q =  "Select Ticker, Date,Open ,High , Low , Close, AdjClose, Volume from TSX where Ticker in ("+ticker+") and Date >='"+date+"'"
+            
+        elif type(ticker) == list and len(ticker) ==1:
+            q =  "Select Ticker, Date,Open ,High , Low , Close, AdjClose, Volume from TSX where Ticker ='"+ticker[0]+"' and Date >='"+date+"'"
+        elif type(ticker) == str:
+            q =  "Select Ticker, Date,Open ,High , Low , Close, AdjClose, Volume from TSX where Ticker ='"+ticker+"' and Date >='"+date+"'"
+    else:
+        q =  "Select Ticker, Date,Open ,High , Low , Close, AdjClose, Volume from TSX where Date >='"+date+"'"
+    df = conn_read(db,q,False,False,cols)
+    df =df.set_index([pd.DatetimeIndex(df['Date'])])
+    if period == 'W':
+        df= df.groupby('Ticker').resample('W').agg({'Open':'first','High':'max','Low':'min','Close':'last','AdjClose':'last','Volume':'sum'})
+    
+    if period == 'D':
+        df=df.reset_index(level=0,drop = True)
+        df = df.set_index(['Ticker', 'Date'])
+    df = df.sort_index()
+    return df
