@@ -12,7 +12,6 @@ from sqlite3 import Error
 import requests
 import json as js
 yf.pdr_override()
-
 #Function to execute commands on SQLITE db that don't return a value
 def conn_exec(db_file,c="",verbose=False):
     """ create a database connection to a SQLite database """
@@ -114,6 +113,7 @@ def refreshTSX(p="1mo",secs = None):
     tbl3 = "CREATE TABLE IF NOT EXISTS Meta (Value char(20),Refreshed Date)"
     tbl3a = "CREATE UNIQUE INDEX idx_value ON Meta (Value)"
     setup = [tbl1,tbl1a,tbl2,tbl2a,tbl3,tbl3a]
+    tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
     conn_exec(db,setup)
 
     if secs:
@@ -137,21 +137,22 @@ def refreshTSX(p="1mo",secs = None):
                 tickers.append(key['symbol'])
             tickers = [t + '.TO' for t in tickers]
             print("Done refreshing Tickers")
+            tickers = tickers.extend(conn_read(db,tickerSQL))
 
         except Exception as err:# requests.exceptions.Timeout as err: 
             print("Ticker Refresh Failed")
-            tickerSQL = "SELECT DISTINCT Ticker FROM TSX"
+            
             tickers = conn_read(db,tickerSQL)
             print("Done Tickers Fall Back")
 
     
     mergeData = "DELETE FROM TSX where ROWID IN (SELECT F.ROWID FROM TSX F JOIN TMP T WHERE F.Ticker = T.Ticker and F.Date = T.Date)"
     insData = "INSERT INTO TSX SELECT Ticker, Date,Open ,High , Low , Close, AdjClose, Volume FROM TMP"
-    tickers = [item for item in tickers if len(item)<8]
+    tickers = [item for item in tickers if len(item)<12]
     #tickers.sort()
-    #test1 = 'SU.TO' in tickers
+    #test1 = 'TECK.B.TO' in tickers
     dontRefresh = conn_read(db,"SELECT Value FROM Meta where julianday()-julianday(Refreshed) <=1")
-    #test2 = 'SU.TO' in dontRefresh
+    #test2 = 'TECK.B.TO' in dontRefresh
     tickers = list(set(tickers) - set(dontRefresh))
     totTickers = len(tickers)
     if totTickers == 0:
@@ -180,7 +181,7 @@ def refreshTSX(p="1mo",secs = None):
         print(i,"out of ",totTickers," checked")
     print("Data Refresh Complete")
 
-def getDF(date,period = 'D"',ticker = None):
+def getDF(date,period = 'D',ticker = None):
     cols = ['Ticker', 'Date','Open' ,'High' , 'Low' , 'Close', 'AdjClose', 'Volume']
     db = "HistoricalData/historicalData.db"
     if ticker:
