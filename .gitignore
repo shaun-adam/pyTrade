@@ -132,3 +132,5 @@ Learning/
 *.db
 historicalData.db
 .pyTrade/Scripts/bokeh.exe
+out.xlsx
+~$out.xlsx

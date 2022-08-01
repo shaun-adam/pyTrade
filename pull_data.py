@@ -135,9 +135,10 @@ def refreshTSX(p="1mo",secs = None):
             ti = ti['results']
             for key in ti:
                 tickers.append(key['symbol'])
+            tickers = [t.replace('.','-') for t in tickers]    
             tickers = [t + '.TO' for t in tickers]
             print("Done refreshing Tickers")
-            tickers = tickers.extend(conn_read(db,tickerSQL))
+            #tickers = tickers.extend(conn_read(db,tickerSQL))
 
         except Exception as err:# requests.exceptions.Timeout as err: 
             print("Ticker Refresh Failed")
@@ -160,7 +161,7 @@ def refreshTSX(p="1mo",secs = None):
 
 
     i = 0
-    for ticks in chunks(tickers,80):
+    for ticks in chunks(tickers,100):
         s = ' '
         ss = s.join(ticks)
         ticksJoined = ss
@@ -201,8 +202,5 @@ def getDF(date,period = 'D',ticker = None):
     if period == 'W':
         df= df.groupby('Ticker').resample('W').agg({'Open':'first','High':'max','Low':'min','Close':'last','AdjClose':'last','Volume':'sum'})
     df = df.rename(columns={"AdjClose":"Adj_Close"})
-    #if period == 'D':
-     #   df=df.reset_index(level=0,drop = True)
-      #  df = df.set_index(['Ticker', 'Date'])
     df = df.sort_index()
     return df
