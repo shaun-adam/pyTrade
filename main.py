@@ -1,7 +1,7 @@
 import pull_data as pu
 
-pu.refreshTSX("1y")
+#pu.refreshTSX("1y")
 
-#test = pu.getDF("2022-06-01",'W','PBD.TO')
-#print(test)
+test = pu.getDF("2022-12-01",'W','PBD.TO')
+print(test)
 
