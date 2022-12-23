@@ -1,18 +1,11 @@
 from pandas_datareader import data as pdr
-#from yahoo_fin import stock_info as si
-from pandas import ExcelWriter
 import yfinance as yf
 import pandas as pd
-import datetime
-import time
 import sqlite3 as sq
-import logging
 from sqlite3 import Error
-
 import requests
-import json as js
+
 yf.pdr_override()
-#Function to execute commands on SQLITE db that don't return a value
 def conn_exec(db_file,c="",verbose=False):
     """ create a database connection to a SQLite database """
     conn = None
@@ -33,8 +26,11 @@ def conn_exec(db_file,c="",verbose=False):
     finally:
         if conn:
             conn.close()
-#Function to inster a data frame into a SQLITE table
+
 def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
+    """Inserts a dataframe into a SQLlite table.
+    If insertMode = 'repalce' the table will be deleted first.
+    """
     conn = None
     try:
         conn = sq.connect(db_file)
@@ -52,6 +48,8 @@ def conn_insert_df(tblName,df,db_file,insertMode = 'replace'):
             conn.close()
 
 def conn_update_meta(val):
+    """Updates the metadata table with the date ticker was last pulled
+    """
     db = "HistoricalData/historicalData.db"
     conn = None
     try:
@@ -66,8 +64,12 @@ def conn_update_meta(val):
         if conn:
             conn.close()
 
-#Function to return all rows of a query against a SQLITE db. By default grabs single column in list.  Otherwise returns dataframe
-def conn_read(db_file,c="",verbose=False, single=True,cols = None,ind = None):
+def conn_read(db_file,c="", verbose=False, single=True, cols = None, ind = None):
+    """Returns a single column as list (default) 
+    or selected cols from table, 
+    or entire dataframe from a table
+    Can optionally set an index on the dataframe
+    """
     conn = None
     try:
         conn = sq.connect(db_file)
@@ -98,9 +100,9 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 def refreshTSX(p="1mo",secs = None):
-    #timeframe to pull
-    #start_date = datetime.datetime.now() - datetime.timedelta(days=daysBack)
-    #end_date = datetime.date.today()
+    """Refreshes all tickers on TSX. Defaults to 1 month.
+    “1d”, “5d”, “1mo”, “3mo”, “6mo”, “1y”, “2y”, “5y”, “10y”, “ytd”, “max”
+    """
     print("Beginning Data Refresh")
     #SQLITE file
     db = "HistoricalData/historicalData.db"
@@ -138,7 +140,7 @@ def refreshTSX(p="1mo",secs = None):
             tickers = [t.replace('.','-') for t in tickers]    
             tickers = [t + '.TO' for t in tickers]
             print("Done refreshing Tickers")
-            #tickers = tickers.extend(conn_read(db,tickerSQL))
+    
 
         except Exception as err:# requests.exceptions.Timeout as err: 
             print("Ticker Refresh Failed")
@@ -164,9 +166,7 @@ def refreshTSX(p="1mo",secs = None):
     for ticks in chunks(tickers,100):
         s = ' '
         ss = s.join(ticks)
-        ticksJoined = ss
-        #“1d”, “5d”, “1mo”, “3mo”, “6mo”, “1y”, “2y”, “5y”, “10y”, “ytd”, “max”
-        df = pdr.get_data_yahoo(ticksJoined,period =p ,progress=True,threads=True)
+        df = pdr.get_data_yahoo(ss,period =p ,progress=True,threads=True)
         df = df.rename(columns={"Adj Close": "AdjClose"})
 
         if secs or totTickers == 1:
@@ -183,6 +183,12 @@ def refreshTSX(p="1mo",secs = None):
     print("Data Refresh Complete")
 
 def getDF(date,period = 'D',ticker = None):
+    """Retrieve a dataframe for a:
+    single ticker (string)
+    list of tickers
+    from date specified forward.
+    Can also specify period = 'W' for weekly resample.
+    """
     cols = ['Ticker', 'Date','Open' ,'High' , 'Low' , 'Close', 'AdjClose', 'Volume']
     db = "HistoricalData/historicalData.db"
     if ticker:
