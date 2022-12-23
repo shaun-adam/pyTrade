@@ -206,7 +206,7 @@ def getDF(date,period = 'D',ticker = None):
     df = conn_read(db,q,False,False,cols)
     df =df.set_index([pd.DatetimeIndex(df['Date'])])
     if period == 'W':
-        df= df.groupby('Ticker').resample('W').agg({'Open':'first','High':'max','Low':'min','Close':'last','AdjClose':'last','Volume':'sum'})
+        df= df.groupby('Ticker').resample('W-MON',label='left',closed='left').agg({'Open':'first','High':'max','Low':'min','Close':'last','AdjClose':'last','Volume':'sum'})
     df = df.rename(columns={"AdjClose":"Adj_Close"})
     df = df.sort_index()
     return df
